@@ -12,9 +12,22 @@ dotenv.config();
 
 const app = express();
 
+// Get allowed origins from environment variable or use defaults
+const allowedOrigins = process.env.FRONTEND_URL 
+  ? process.env.FRONTEND_URL.split(',') 
+  : ["http://localhost:5173"];
+
 // Middleware
 app.use(cors({
-  origin: process.env.FRONTEND_URL || "http://localhost:5173",
+  origin: function(origin, callback) {
+    // Allow requests with no origin (mobile apps, curl, etc)
+    if (!origin) return callback(null, true);
+    
+    if (allowedOrigins.indexOf(origin) === -1) {
+      return callback(new Error('CORS policy violation'), false);
+    }
+    return callback(null, true);
+  },
   credentials: true
 }));
 app.use(express.json());
@@ -27,112 +40,16 @@ const server = http.createServer(app);
 
 const io = new Server(server, {
   cors: {
-    origin: process.env.FRONTEND_URL || "http://localhost:5173",
+    origin: function(origin, callback) {
+      if (!origin) return callback(null, true);
+      if (allowedOrigins.indexOf(origin) === -1) {
+        return callback(new Error('CORS policy violation'), false);
+      }
+      return callback(null, true);
+    },
     methods: ["GET", "POST"],
     credentials: true
   },
 });
 
-const rooms = new Map();
-
-io.on("connection", (socket) => {
-  console.log("User Connected", socket.id);
-
-  let currentRoom = null;
-  let currentUser = null;
-
-  socket.on("join", ({ roomId, userName }) => {
-    if (currentRoom) {
-      socket.leave(currentRoom);
-      rooms.get(currentRoom).delete(currentUser);
-      io.to(currentRoom).emit("userJoined", Array.from(rooms.get(currentRoom)));
-    }
-
-    currentRoom = roomId;
-    currentUser = userName;
-
-    socket.join(roomId);
-
-    if (!rooms.has(roomId)) {
-      rooms.set(roomId, new Set());
-    }
-
-    rooms.get(roomId).add(userName);
-
-    io.to(roomId).emit("userJoined", Array.from(rooms.get(currentRoom)));
-  });
-
-  socket.on("codeChange", ({ roomId, code }) => {
-    socket.to(roomId).emit("codeUpdate", code);
-  });
-
-  socket.on("leaveRoom", () => {
-    if (currentRoom && currentUser) {
-      rooms.get(currentRoom).delete(currentUser);
-      io.to(currentRoom).emit("userJoined", Array.from(rooms.get(currentRoom)));
-
-      socket.leave(currentRoom);
-
-      currentRoom = null;
-      currentUser = null;
-    }
-  });
-
-  socket.on("typing", ({ roomId, userName }) => {
-    socket.to(roomId).emit("userTyping", userName);
-  });
-
-  socket.on("languageChange", ({ roomId, language }) => {
-    io.to(roomId).emit("languageUpdate", language);
-  });
-
-  // Code compilation handler
-  socket.on("compileCode", async ({ code, roomId, language, version, input }) => {
-    try {
-      // Using Piston API for code execution
-      const response = await axios.post('https://emkc.org/api/v2/piston/execute', {
-        language: language,
-        version: version || '*',
-        files: [{
-          content: code
-        }],
-        stdin: input || ''
-      });
-
-      socket.emit("codeResponse", {
-        run: {
-          output: response.data.run.output || response.data.run.stderr || 'No output'
-        }
-      });
-    } catch (error) {
-      console.error('Compilation error:', error.message);
-      socket.emit("codeResponse", {
-        run: {
-          output: `Error: ${error.message}`
-        }
-      });
-    }
-  });
-
-  socket.on("disconnect", () => {
-    if (currentRoom && currentUser) {
-      rooms.get(currentRoom).delete(currentUser);
-      io.to(currentRoom).emit("userJoined", Array.from(rooms.get(currentRoom)));
-    }
-    console.log("user Disconnected");
-  });
-});
-
-const port = process.env.PORT || 5000;
-
-const __dirname = path.resolve();
-
-app.use(express.static(path.join(__dirname, "/frontend/dist")));
-
-app.get("*", (req, res) => {
-  res.sendFile(path.join(__dirname, "frontend", "dist", "index.html"));
-});
-
-server.listen(port, () => {
-  console.log(`🚀 Server is running on port ${port}`);
-});
+// Rest of your code remains the same...

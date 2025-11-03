@@ -1,27 +1,49 @@
-import jwt from 'jsonwebtoken';
-import dotenv from 'dotenv';
+import axios from 'axios';
 
-dotenv.config();
+const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:5000/api';
 
-export const authenticateToken = (req, res, next) => {
-  const authHeader = req.headers['authorization'];
-  const token = authHeader && authHeader.split(' ')[1]; // Bearer TOKEN
+const api = axios.create({
+  baseURL: API_URL,
+  headers: {
+    'Content-Type': 'application/json',
+  },
+});
 
-  if (!token) {
-    return res.status(401).json({ 
-      success: false, 
-      message: 'Access token required' 
-    });
-  }
-
-  jwt.verify(token, process.env.JWT_SECRET, (err, user) => {
-    if (err) {
-      return res.status(403).json({ 
-        success: false, 
-        message: 'Invalid or expired token' 
-      });
+// Add token to requests
+api.interceptors.request.use(
+  (config) => {
+    const token = localStorage.getItem('token');
+    if (token) {
+      config.headers.Authorization = `Bearer ${token}`;
     }
-    req.user = user;
-    next();
-  });
+    return config;
+  },
+  (error) => {
+    return Promise.reject(error);
+  }
+);
+
+// Auth APIs
+export const authAPI = {
+  signup: async (userData) => {
+    const response = await api.post('/auth/signup', userData);
+    return response.data;
+  },
+
+  login: async (credentials) => {
+    const response = await api.post('/auth/login', credentials);
+    return response.data;
+  },
+
+  getCurrentUser: async () => {
+    const response = await api.get('/auth/me');
+    return response.data;
+  },
+
+  logout: async () => {
+    const response = await api.post('/auth/logout');
+    return response.data;
+  },
 };
+
+export default api;

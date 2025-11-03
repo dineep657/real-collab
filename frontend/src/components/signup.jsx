@@ -40,7 +40,6 @@ const Signup = ({ setUser }) => {
       });
       
       if (response.success) {
-        // Store token and user data
         localStorage.setItem('token', response.data.token);
         localStorage.setItem('user', JSON.stringify(response.data.user));
         
@@ -55,7 +54,48 @@ const Signup = ({ setUser }) => {
   };
 
   const styles = {
-    // ... (keep existing styles)
+    container: {
+      minHeight: '100vh',
+      display: 'flex',
+      alignItems: 'center',
+      justifyContent: 'center',
+      background: 'linear-gradient(to bottom right, #312e81, #7c3aed, #db2777)',
+      padding: '2rem',
+    },
+    card: {
+      background: 'rgba(255, 255, 255, 0.1)',
+      backdropFilter: 'blur(16px)',
+      padding: '2.5rem',
+      borderRadius: '16px',
+      boxShadow: '0 8px 32px 0 rgba(31, 38, 135, 0.37)',
+      border: '1px solid rgba(255, 255, 255, 0.2)',
+      width: '100%',
+      maxWidth: '450px',
+    },
+    header: {
+      textAlign: 'center',
+      marginBottom: '2rem',
+    },
+    iconContainer: {
+      width: '64px',
+      height: '64px',
+      margin: '0 auto 1rem',
+      background: 'rgba(167, 139, 250, 0.1)',
+      borderRadius: '12px',
+      display: 'flex',
+      alignItems: 'center',
+      justifyContent: 'center',
+    },
+    title: {
+      fontSize: '2rem',
+      fontWeight: 'bold',
+      color: 'white',
+      marginBottom: '0.5rem',
+    },
+    subtitle: {
+      color: 'rgba(255, 255, 255, 0.8)',
+      fontSize: '1rem',
+    },
     error: {
       color: '#ef4444',
       fontSize: '0.875rem',
@@ -64,6 +104,68 @@ const Signup = ({ setUser }) => {
       background: 'rgba(239, 68, 68, 0.1)',
       borderRadius: '0.5rem',
       border: '1px solid rgba(239, 68, 68, 0.3)',
+    },
+    form: {
+      display: 'flex',
+      flexDirection: 'column',
+      gap: '1.5rem',
+    },
+    inputGroup: {
+      display: 'flex',
+      flexDirection: 'column',
+      gap: '0.5rem',
+    },
+    label: {
+      color: 'white',
+      fontSize: '0.875rem',
+      fontWeight: '500',
+    },
+    input: {
+      width: '100%',
+      padding: '0.875rem',
+      background: 'rgba(255, 255, 255, 0.1)',
+      border: '1px solid rgba(255, 255, 255, 0.2)',
+      borderRadius: '8px',
+      fontSize: '1rem',
+      color: 'white',
+      transition: 'all 0.3s ease',
+    },
+    button: {
+      width: '100%',
+      padding: '0.875rem',
+      background: '#9333ea',
+      color: 'white',
+      border: 'none',
+      borderRadius: '8px',
+      fontSize: '1rem',
+      fontWeight: '600',
+      cursor: 'pointer',
+      transition: 'all 0.3s ease',
+    },
+    footer: {
+      marginTop: '2rem',
+      textAlign: 'center',
+    },
+    footerText: {
+      color: 'rgba(255, 255, 255, 0.8)',
+      fontSize: '0.875rem',
+      marginBottom: '1rem',
+    },
+    link: {
+      color: '#a78bfa',
+      background: 'none',
+      border: 'none',
+      cursor: 'pointer',
+      fontSize: '0.875rem',
+      fontWeight: '600',
+      textDecoration: 'underline',
+    },
+    backLink: {
+      color: 'rgba(255, 255, 255, 0.6)',
+      background: 'none',
+      border: 'none',
+      cursor: 'pointer',
+      fontSize: '0.875rem',
     },
   };
 
