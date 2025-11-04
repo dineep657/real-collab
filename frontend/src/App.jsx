@@ -2,23 +2,18 @@ import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-d
 import { useState, useEffect } from 'react';
 import Home from './components/home';
 import Editor from './components/editor';
-// Auth disabled: hide login/signup and allow guest access
+// Auth disabled: prompt for name and allow entry without signup/login
 
 function App() {
   const [user, setUser] = useState(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    // Auth disabled: create a guest user
+    // If a name was previously entered, restore it
     const existing = localStorage.getItem('guest_user');
     if (existing) {
       setUser(JSON.parse(existing));
-      setLoading(false);
-      return;
     }
-    const guest = { id: 'guest', name: `Guest-${Math.floor(Math.random()*1000)}` };
-    localStorage.setItem('guest_user', JSON.stringify(guest));
-    setUser(guest);
     setLoading(false);
   }, []);
 
@@ -42,7 +37,7 @@ function App() {
     <Router>
       <Routes>
         <Route path="/" element={<Home user={user} setUser={setUser} />} />
-        <Route path="/editor" element={<Editor user={user || { name: 'Guest' }} />} />
+        <Route path="/editor" element={user ? <Editor user={user} /> : <Navigate to="/" />} />
         <Route path="*" element={<Navigate to="/" />} />
       </Routes>
     </Router>

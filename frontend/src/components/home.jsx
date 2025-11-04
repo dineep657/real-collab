@@ -3,6 +3,11 @@ import { Code2, Users, Zap, Globe } from 'lucide-react';
 
 const Home = ({ user, setUser }) => {
   const navigate = useNavigate();
+  const setLocalUser = (name) => {
+    const u = { id: 'guest', name: name.trim() };
+    localStorage.setItem('guest_user', JSON.stringify(u));
+    return u;
+  };
 
   const handleLogout = () => {
     localStorage.removeItem('token');
@@ -188,17 +193,21 @@ const Home = ({ user, setUser }) => {
           <span>CodeCollab</span>
         </div>
         <div style={styles.navButtons}>
-          <span style={{ ...styles.loginButton, cursor: 'default' }}>
-            {user ? `Welcome, ${user.name}` : 'Guest Mode'}
-          </span>
-          <button
-            onClick={() => navigate('/editor')}
-            style={styles.signupButton}
-            onMouseEnter={(e) => e.target.style.transform = 'translateY(-2px)'}
-            onMouseLeave={(e) => e.target.style.transform = 'translateY(0)'}
-          >
-            Open Editor
-          </button>
+          {user ? (
+            <>
+              <span style={{ ...styles.loginButton, cursor: 'default' }}>
+                Welcome, {user.name}
+              </span>
+              <button
+                onClick={() => navigate('/editor')}
+                style={styles.signupButton}
+                onMouseEnter={(e) => e.target.style.transform = 'translateY(-2px)'}
+                onMouseLeave={(e) => e.target.style.transform = 'translateY(0)'}
+              >
+                Open Editor
+              </button>
+            </>
+          ) : null}
         </div>
       </nav>
 
@@ -208,20 +217,63 @@ const Home = ({ user, setUser }) => {
           Real-time collaborative coding platform with instant synchronization,
           live code execution, and seamless team communication.
         </p>
-        <button
-          onClick={() => navigate('/editor')}
-          style={styles.ctaButton}
-          onMouseEnter={(e) => {
-            e.target.style.transform = 'translateY(-4px)';
-            e.target.style.boxShadow = '0 10px 30px rgba(0, 0, 0, 0.3)';
-          }}
-          onMouseLeave={(e) => {
-            e.target.style.transform = 'translateY(0)';
-            e.target.style.boxShadow = 'none';
-          }}
-        >
-          Start Coding Now
-        </button>
+
+        {!user ? (
+          <div style={{ maxWidth: 420, margin: '0 auto', display: 'flex', gap: '0.75rem', alignItems: 'center', justifyContent: 'center' }}>
+            <input
+              type="text"
+              placeholder="Enter your name"
+              style={{
+                padding: '0.875rem 1rem',
+                borderRadius: '0.5rem',
+                border: '1px solid rgba(255,255,255,0.3)',
+                background: 'rgba(255,255,255,0.1)',
+                color: 'white',
+                flex: 1,
+              }}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter') {
+                  const name = e.currentTarget.value.trim();
+                  if (name) {
+                    const u = setLocalUser(name);
+                    setUser(u);
+                    navigate('/editor');
+                  }
+                }
+              }}
+              id="name-input"
+            />
+            <button
+              style={styles.ctaButton}
+              onClick={() => {
+                const el = document.getElementById('name-input');
+                const name = el?.value.trim();
+                if (name) {
+                  const u = setLocalUser(name);
+                  setUser(u);
+                  navigate('/editor');
+                }
+              }}
+            >
+              Continue
+            </button>
+          </div>
+        ) : (
+          <button
+            onClick={() => navigate('/editor')}
+            style={styles.ctaButton}
+            onMouseEnter={(e) => {
+              e.target.style.transform = 'translateY(-4px)';
+              e.target.style.boxShadow = '0 10px 30px rgba(0, 0, 0, 0.3)';
+            }}
+            onMouseLeave={(e) => {
+              e.target.style.transform = 'translateY(0)';
+              e.target.style.boxShadow = 'none';
+            }}
+          >
+            Open Editor
+          </button>
+        )}
       </div>
 
       <div style={styles.features}>
