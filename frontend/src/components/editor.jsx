@@ -1,16 +1,17 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState, useRef } from "react";
 import { useNavigate } from "react-router-dom";
 import "../App.css";
 import io from "socket.io-client";
 import Editor from "@monaco-editor/react";
 
-const SOCKET_URL = import.meta.env.VITE_SOCKET_URL || "http://localhost:5000";
-const socket = io(SOCKET_URL);
+const SOCKET_URL = import.meta.env.VITE_SOCKET_URL || import.meta.env.VITE_API_URL || "http://localhost:5001";
 
 const EditorComponent = ({ user }) => {
   const navigate = useNavigate();
   const [joined, setJoined] = useState(false);
   const [roomId, setRoomId] = useState("");
+  const [socket, setSocket] = useState(null);
+  const [socketConnected, setSocketConnected] = useState(false);
   const [language, setLanguage] = useState("javascript");
   const [code, setCode] = useState("// start code here");
   const [copySuccess, setCopySuccess] = useState("");
@@ -23,9 +24,10 @@ const EditorComponent = ({ user }) => {
   const [chatInput, setChatInput] = useState("");
   const [chat, setChat] = useState([]); // {userName, message, timestamp}
   const [logs, setLogs] = useState([]); // session logs
-  const editorRef = useState(null)[0];
-  const decorationsRef = useState({})[0]; // userName -> decorationIds
-  const userColorsRef = useState({})[0];
+  const editorRef = useRef(null);
+  const decorationsRef = useRef({}); // userName -> decorationIds
+  const userColorsRef = useRef({});
+  const chatUserColorsRef = useRef({}); // userName -> chat color
   const [userInput, setUserInput] = useState("");
   const [role, setRole] = useState("editor"); // viewer disables edits
 
@@ -37,6 +39,39 @@ const EditorComponent = ({ user }) => {
   const activeFile = useMemo(() => files.find(f => f.id === activeFileId) || files[0], [files, activeFileId]);
   const [recentFiles, setRecentFiles] = useState(["main"]);
 
+  // Initialize socket connection
+  useEffect(() => {
+    if (!user) return;
+
+    const newSocket = io(SOCKET_URL, {
+      transports: ['websocket', 'polling'],
+      reconnection: true,
+      reconnectionDelay: 1000,
+      reconnectionAttempts: 5
+    });
+
+    newSocket.on('connect', () => {
+      console.log('Socket connected');
+      setSocketConnected(true);
+    });
+
+    newSocket.on('disconnect', () => {
+      console.log('Socket disconnected');
+      setSocketConnected(false);
+    });
+
+    newSocket.on('connect_error', (error) => {
+      console.error('Socket connection error:', error);
+      setSocketConnected(false);
+    });
+
+    setSocket(newSocket);
+
+    return () => {
+      newSocket.close();
+    };
+  }, [user]);
+
   // Redirect if not logged in
   useEffect(() => {
     if (!user) {
@@ -46,7 +81,7 @@ const EditorComponent = ({ user }) => {
 
   // Check for saved room on mount
   useEffect(() => {
-    if (!user) return;
+    if (!user || !socket || !socketConnected) return;
 
     const params = new URLSearchParams(window.location.search);
     const r = params.get('role');
@@ -57,58 +92,85 @@ const EditorComponent = ({ user }) => {
 
     // Verify saved username matches current user
     if (savedRoomId && savedUserName === user.name) {
+      console.log('Restoring saved room:', savedRoomId);
       setRoomId(savedRoomId);
-      socket.emit("join", { roomId: savedRoomId, userName: user.name });
       setJoined(true);
+      
+      // Join the room
+      if (socket.connected) {
+        socket.emit("join", { roomId: savedRoomId, userName: user.name });
+        console.log('Rejoined saved room:', savedRoomId);
+      }
     }
-  }, [user]);
+  }, [user, socket, socketConnected]);
 
   useEffect(() => {
-    socket.on("userJoined", (users) => {
+    if (!socket) return;
+
+    const handleUserJoined = (users) => {
+      console.log('User joined event received:', users);
       setUsers(users);
-      setLogs((l) => [{ type: 'info', message: `Users online: ${users.length}`, timestamp: Date.now() }, ...l]);
-    });
+      
+      // Add log entry for each user joining
+      const currentUserList = users;
+      setLogs((l) => {
+        const newLog = { 
+          type: 'info', 
+          message: `Users in room: ${currentUserList.join(', ')} (${currentUserList.length} total)`, 
+          timestamp: Date.now() 
+        };
+        return [newLog, ...l];
+      });
+    };
 
-    socket.on("codeUpdate", (newCode) => {
+    const handleCodeUpdate = (newCode) => {
       setCode(newCode);
-    });
+    };
 
-    socket.on("userTyping", (userName) => {
+    const handleUserTyping = (userName) => {
       setTyping(`${userName.slice(0, 15)}... is Typing`);
       setTimeout(() => setTyping(""), 2000);
-    });
+    };
 
-    socket.on("languageUpdate", (newLanguage) => {
+    const handleLanguageUpdate = (newLanguage) => {
       setLanguage(newLanguage);
-    });
+    };
 
-    socket.on("codeResponse", (response) => {
-      setOutPut(response.run.output);
-    });
+    const handleCodeResponse = (response) => {
+      console.log('Code execution response:', response);
+      if (response && response.run) {
+        const output = response.run.output || 'No output';
+        setOutPut(output);
+        console.log('Output set to:', output);
+      } else {
+        setOutPut('Error: Invalid response from server');
+        console.error('Invalid response structure:', response);
+      }
+    };
 
-    socket.on("chatMessage", (msg) => {
+    const handleChatMessage = (msg) => {
       setChat((c) => [...c, msg]);
-    });
+    };
 
-    socket.on("chatTyping", ({ userName }) => {
+    const handleChatTyping = ({ userName }) => {
       setTyping(`${userName.slice(0, 15)}... is Typing`);
       setTimeout(() => setTyping(""), 1500);
-    });
+    };
 
-    socket.on("sessionLog", (entry) => {
+    const handleSessionLog = (entry) => {
       setLogs((l) => [entry, ...l].slice(0, 100));
-    });
+    };
 
-    socket.on("cursorUpdate", ({ userName, position }) => {
+    const handleCursorUpdate = ({ userName, position }) => {
       try {
-        if (!editorRef) return;
-        const monaco = editorRef._standaloneKeybindingService ? window.monaco : null;
-        const model = editorRef.getModel();
+        if (!editorRef.current) return;
+        const monaco = editorRef.current._standaloneKeybindingService ? window.monaco : null;
+        const model = editorRef.current.getModel();
         if (!model) return;
-        if (!userColorsRef[userName]) {
-          userColorsRef[userName] = `hsl(${Math.floor(Math.random()*360)} 70% 60%)`;
+        if (!userColorsRef.current[userName]) {
+          userColorsRef.current[userName] = `hsl(${Math.floor(Math.random()*360)} 70% 60%)`;
         }
-        const color = userColorsRef[userName];
+        const color = userColorsRef.current[userName];
         const range = {
           startLineNumber: position.lineNumber,
           startColumn: position.column,
@@ -123,19 +185,19 @@ const EditorComponent = ({ user }) => {
           afterContentClassName: '',
         };
         const deco = [{ range, options: { inlineClassName: '', className: '', overviewRuler: { color, position: 4 } } }];
-        const prev = decorationsRef[userName] || [];
-        const next = editorRef.deltaDecorations(prev, deco);
-        decorationsRef[userName] = next;
+        const prev = decorationsRef.current[userName] || [];
+        const next = editorRef.current.deltaDecorations(prev, deco);
+        decorationsRef.current[userName] = next;
       } catch {}
-    });
+    };
 
-    socket.on("selectionUpdate", ({ userName, selection }) => {
+    const handleSelectionUpdate = ({ userName, selection }) => {
       try {
-        if (!editorRef) return;
-        if (!userColorsRef[userName]) {
-          userColorsRef[userName] = `hsl(${Math.floor(Math.random()*360)} 70% 60%)`;
+        if (!editorRef.current) return;
+        if (!userColorsRef.current[userName]) {
+          userColorsRef.current[userName] = `hsl(${Math.floor(Math.random()*360)} 70% 60%)`;
         }
-        const color = userColorsRef[userName];
+        const color = userColorsRef.current[userName];
         const range = {
           startLineNumber: selection.startLineNumber,
           startColumn: selection.startColumn,
@@ -143,29 +205,42 @@ const EditorComponent = ({ user }) => {
           endColumn: selection.endColumn,
         };
         const deco = [{ range, options: { className: '', inlineClassName: '', isWholeLine: false, overviewRuler: { color, position: 4 } } }];
-        const prev = decorationsRef[userName] || [];
-        const next = editorRef.deltaDecorations(prev, deco);
-        decorationsRef[userName] = next;
+        const prev = decorationsRef.current[userName] || [];
+        const next = editorRef.current.deltaDecorations(prev, deco);
+        decorationsRef.current[userName] = next;
       } catch {}
-    });
+    };
+
+    socket.on("userJoined", handleUserJoined);
+    socket.on("codeUpdate", handleCodeUpdate);
+    socket.on("userTyping", handleUserTyping);
+    socket.on("languageUpdate", handleLanguageUpdate);
+    socket.on("codeResponse", handleCodeResponse);
+    socket.on("chatMessage", handleChatMessage);
+    socket.on("chatTyping", handleChatTyping);
+    socket.on("sessionLog", handleSessionLog);
+    socket.on("cursorUpdate", handleCursorUpdate);
+    socket.on("selectionUpdate", handleSelectionUpdate);
 
     return () => {
-      socket.off("userJoined");
-      socket.off("codeUpdate");
-      socket.off("userTyping");
-      socket.off("languageUpdate");
-      socket.off("codeResponse");
-      socket.off("chatMessage");
-      socket.off("chatTyping");
-      socket.off("sessionLog");
-      socket.off("cursorUpdate");
-      socket.off("selectionUpdate");
+      socket.off("userJoined", handleUserJoined);
+      socket.off("codeUpdate", handleCodeUpdate);
+      socket.off("userTyping", handleUserTyping);
+      socket.off("languageUpdate", handleLanguageUpdate);
+      socket.off("codeResponse", handleCodeResponse);
+      socket.off("chatMessage", handleChatMessage);
+      socket.off("chatTyping", handleChatTyping);
+      socket.off("sessionLog", handleSessionLog);
+      socket.off("cursorUpdate", handleCursorUpdate);
+      socket.off("selectionUpdate", handleSelectionUpdate);
     };
-  }, []);
+  }, [socket]);
 
   useEffect(() => {
     const handleBeforeUnload = () => {
-      socket.emit("leaveRoom");
+      if (socket) {
+        socket.emit("leaveRoom");
+      }
     };
 
     window.addEventListener("beforeunload", handleBeforeUnload);
@@ -173,19 +248,37 @@ const EditorComponent = ({ user }) => {
     return () => {
       window.removeEventListener("beforeunload", handleBeforeUnload);
     };
-  }, []);
+  }, [socket]);
 
   const joinRoom = () => {
-    if (roomId && user) {
+    if (!roomId || !user || !socket || !socketConnected) {
+      if (!socketConnected) {
+        alert('Please wait for connection to establish...');
+      }
+      return;
+    }
+    
+    console.log('Attempting to join room:', roomId, 'as user:', user.name);
+    
+    // Set joined immediately to show UI
+    setJoined(true);
+    sessionStorage.setItem('roomId', roomId);
+    sessionStorage.setItem('userName', user.name);
+    
+    // Emit join immediately
+    if (socket && socket.connected) {
       socket.emit("join", { roomId, userName: user.name });
-      setJoined(true);
-      sessionStorage.setItem('roomId', roomId);
-      sessionStorage.setItem('userName', user.name);
+      console.log('Join event emitted for room:', roomId);
+    } else {
+      console.error('Socket not connected, cannot join room');
+      setJoined(false);
     }
   };
 
   const leaveRoom = () => {
-    socket.emit("leaveRoom");
+    if (socket) {
+      socket.emit("leaveRoom");
+    }
     setJoined(false);
     sessionStorage.removeItem('roomId');
     sessionStorage.removeItem('userName');
@@ -199,7 +292,7 @@ const EditorComponent = ({ user }) => {
   };
 
   const handleCodeChange = (newCode) => {
-    if (role === 'viewer') return;
+    if (role === 'viewer' || !socket) return;
     setCode(newCode);
     setFiles((fs) => fs.map(f => f.id === activeFileId ? { ...f, content: newCode, language } : f));
     socket.emit("codeChange", { roomId, code: newCode });
@@ -208,12 +301,16 @@ const EditorComponent = ({ user }) => {
 
   const handleEditorMount = (editor) => {
     // store ref
-    // eslint-disable-next-line no-unused-expressions
-    (editorRef = editor);
+    editorRef.current = editor;
+    if (!socket) return;
+    
     editor.onDidChangeCursorPosition((e) => {
-      socket.emit('cursorMove', { roomId, userName: user.name, position: e.position });
+      if (socket) {
+        socket.emit('cursorMove', { roomId, userName: user.name, position: e.position });
+      }
     });
     editor.onDidChangeCursorSelection((e) => {
+      if (!socket) return;
       const s = e.selection;
       socket.emit('selectionChange', { roomId, userName: user.name, selection: {
         startLineNumber: s.startLineNumber,
@@ -224,21 +321,164 @@ const EditorComponent = ({ user }) => {
     });
   };
 
+  // Get consistent color for a user (for chat)
+  const getUserChatColor = (userName) => {
+    if (!chatUserColorsRef.current[userName]) {
+      // Generate a color based on username hash for consistency
+      let hash = 0;
+      for (let i = 0; i < userName.length; i++) {
+        hash = userName.charCodeAt(i) + ((hash << 5) - hash);
+      }
+      // Generate bright, vibrant colors
+      const hue = Math.abs(hash) % 360;
+      chatUserColorsRef.current[userName] = `hsl(${hue}, 70%, 65%)`;
+    }
+    return chatUserColorsRef.current[userName];
+  };
+
   const sendChat = () => {
     const message = chatInput.trim();
-    if (!message) return;
+    if (!message || !socket) return;
     socket.emit('chatMessage', { roomId, userName: user.name, message });
     setChatInput('');
+  };
+
+  // Sample code templates for each language - Simple versions that work
+  const getSampleCode = (lang) => {
+    const samples = {
+      javascript: `// Simple JavaScript Example
+console.log("Hello, World!");
+console.log("2 + 3 =", 2 + 3);
+console.log("Code executed successfully!");`,
+
+      python: `# Simple Python Example
+print("Hello, World!")
+print("2 + 3 =", 2 + 3)
+print("Code executed successfully!")`,
+
+      java: `// Simple Java Example
+public class Main {
+    public static void main(String[] args) {
+        System.out.println("Hello, World!");
+        System.out.println("2 + 3 = " + (2 + 3));
+        System.out.println("Code executed successfully!");
+    }
+}`,
+
+      cpp: `// Simple C++ Example
+#include <iostream>
+using namespace std;
+
+int main() {
+    cout << "Hello, World!" << endl;
+    cout << "2 + 3 = " << (2 + 3) << endl;
+    cout << "Code executed successfully!" << endl;
+    return 0;
+}`,
+
+      c: `// Simple C Example
+#include <stdio.h>
+
+int main() {
+    printf("Hello, World!\\n");
+    printf("2 + 3 = %d\\n", 2 + 3);
+    printf("Code executed successfully!\\n");
+    return 0;
+}`,
+
+      typescript: `// Simple TypeScript Example
+console.log("Hello, World!");
+console.log("2 + 3 =", 2 + 3);
+console.log("Code executed successfully!");`,
+
+      go: `// Simple Go Example
+package main
+
+import "fmt"
+
+func main() {
+    fmt.Println("Hello, World!")
+    fmt.Println("2 + 3 =", 2 + 3)
+    fmt.Println("Code executed successfully!")
+}`,
+
+      rust: `// Simple Rust Example
+fn main() {
+    println!("Hello, World!");
+    println!("2 + 3 = {}", 2 + 3);
+    println!("Code executed successfully!");
+}`,
+
+      ruby: `# Simple Ruby Example
+puts "Hello, World!"
+puts "2 + 3 = #{2 + 3}"
+puts "Code executed successfully!"`,
+
+      php: `<?php
+// Simple PHP Example
+echo "Hello, World!" . PHP_EOL;
+echo "2 + 3 = " . (2 + 3) . PHP_EOL;
+echo "Code executed successfully!" . PHP_EOL;
+?>`,
+    };
+    
+    return samples[lang] || samples.javascript;
+  };
+
+  const loadSampleCode = () => {
+    if (role === 'viewer') {
+      alert('Viewers cannot load sample code');
+      return;
+    }
+    
+    const sampleCode = getSampleCode(language);
+    setCode(sampleCode);
+    
+    // Update the active file
+    setFiles((fs) => fs.map(f => 
+      f.id === activeFileId 
+        ? { ...f, content: sampleCode, language } 
+        : f
+    ));
+    
+    // Emit code change to sync with other users
+    if (socket && roomId) {
+      socket.emit("codeChange", { roomId, code: sampleCode });
+    }
   };
 
   const handleLanguageChange = (e) => {
     const newLanguage = e.target.value;
     setLanguage(newLanguage);
-    socket.emit("languageChange", { roomId, language: newLanguage });
+    if (socket) {
+      socket.emit("languageChange", { roomId, language: newLanguage });
+    }
   };
 
   const runCode = () => {
-    if (role === 'viewer') return;
+    if (role === 'viewer' || !socket) {
+      alert('Viewers cannot execute code');
+      return;
+    }
+    
+    if (!socket || !socket.connected) {
+      alert('Not connected to server. Please wait...');
+      return;
+    }
+
+    if (!code || code.trim() === '') {
+      alert('Please write some code first');
+      return;
+    }
+
+    console.log('Executing code:', { 
+      language, 
+      roomId, 
+      codeLength: code.length,
+      codePreview: code.substring(0, 100)
+    });
+    setOutPut('Executing...');
+    
     socket.emit("compileCode", {
       code,
       roomId,
@@ -287,10 +527,10 @@ const EditorComponent = ({ user }) => {
 
   const goToLine = () => {
     const n = parseInt(prompt('Go to line:') || '');
-    if (!isNaN(n) && editorRef) {
-      editorRef.revealLineInCenter(n);
-      editorRef.setPosition({ lineNumber: n, column: 1 });
-      editorRef.focus();
+    if (!isNaN(n) && editorRef.current) {
+      editorRef.current.revealLineInCenter(n);
+      editorRef.current.setPosition({ lineNumber: n, column: 1 });
+      editorRef.current.focus();
     }
   };
 
@@ -324,9 +564,14 @@ const EditorComponent = ({ user }) => {
             onChange={(e) => setRoomId(e.target.value)}
           />
           <button onClick={createRoomId}>Create New Room</button>
-          <button onClick={joinRoom} disabled={!roomId}>
-            Join Room
+          <button onClick={joinRoom} disabled={!roomId || !socketConnected}>
+            {socketConnected ? 'Join Room' : 'Connecting...'}
           </button>
+          {!socketConnected && (
+            <p style={{ color: '#ffa500', fontSize: '0.9rem', marginTop: '0.5rem' }}>
+              Waiting for server connection...
+            </p>
+          )}
           <button 
             onClick={() => navigate('/')}
             style={{ marginTop: '10px', backgroundColor: '#6c757d' }}
@@ -409,6 +654,14 @@ const EditorComponent = ({ user }) => {
           <option value="java">Java</option>
           <option value="cpp">C++</option>
         </select>
+        <button 
+          className="copy-button" 
+          onClick={loadSampleCode}
+          style={{ marginTop: '0.75rem', width: '100%' }}
+          title="Load sample code for the selected language"
+        >
+          📝 Load Sample Code
+        </button>
         <button className="leave-button" onClick={leaveRoom}>
           Leave Room
         </button>
@@ -427,8 +680,8 @@ const EditorComponent = ({ user }) => {
         </div>
       </div>
 
-      <div className="editor-wrapper" style={{ display: 'grid', gridTemplateColumns: '1fr 320px', gap: '12px' }}>
-        <div style={{ display: 'flex', flexDirection: 'column' }}>
+      <div className="editor-wrapper">
+        <div style={{ display: 'flex', flexDirection: 'column', flex: 1, minHeight: 0 }}>
           <div style={{ display: 'flex', gap: '8px', alignItems: 'center', marginBottom: '8px' }}>
             <label style={{ color: '#bdc3c7', fontSize: 12 }}>Theme</label>
             <select value={theme} onChange={(e) => setTheme(e.target.value)} className="language-selector">
@@ -453,7 +706,7 @@ const EditorComponent = ({ user }) => {
             ))}
           </div>
         <Editor
-          height={"60%"}
+          height={"500px"}
           defaultLanguage={language}
           language={language}
           value={code}
@@ -486,17 +739,38 @@ const EditorComponent = ({ user }) => {
           <div style={{ marginBottom: 8 }}>
             <h4 style={{ margin: 0, color: '#ecf0f1' }}>Chat</h4>
             <div style={{ height: 180, overflowY: 'auto', border: '1px solid rgba(255,255,255,0.15)', borderRadius: 8, padding: 8, background: 'rgba(255,255,255,0.05)' }}>
-              {chat.map((m, idx) => (
-                <div key={idx} style={{ marginBottom: 6, fontSize: 13 }}>
-                  <span style={{ color: '#66c2ff' }}>{m.userName}</span>
-                  <span style={{ color: '#7f8c8d', marginLeft: 6 }}>{new Date(m.timestamp).toLocaleTimeString()}</span>
-                  <div>{m.message}</div>
-                </div>
-              ))}
+              {chat.map((m, idx) => {
+                const userColor = getUserChatColor(m.userName);
+                const messageColor = `hsl(${userColor.match(/\d+/)?.[0] || 200}, 70%, 75%)`;
+                return (
+                  <div key={idx} style={{ marginBottom: 8, fontSize: 13 }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 2 }}>
+                      <span style={{ 
+                        color: userColor, 
+                        fontWeight: '600',
+                        fontSize: '13px'
+                      }}>
+                        {m.userName}
+                      </span>
+                      <span style={{ color: '#7f8c8d', fontSize: '11px' }}>
+                        {new Date(m.timestamp).toLocaleTimeString()}
+                      </span>
+                    </div>
+                    <div style={{ 
+                      color: messageColor, 
+                      marginLeft: 4,
+                      wordWrap: 'break-word',
+                      lineHeight: '1.4'
+                    }}>
+                      {m.message}
+                    </div>
+                  </div>
+                );
+              })}
               {chat.length === 0 && <div style={{ color: '#7f8c8d', fontSize: 12 }}>No messages yet</div>}
             </div>
             <div style={{ display: 'flex', gap: 6, marginTop: 6 }}>
-              <input value={chatInput} onChange={(e) => setChatInput(e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter') sendChat(); else socket.emit('chatTyping', { roomId, userName: user.name }); }} placeholder="Type a message..." style={{ flex: 1, padding: '8px 10px', background: 'rgba(255,255,255,0.08)', border: '1px solid rgba(255,255,255,0.2)', borderRadius: 6, color: '#ecf0f1' }} />
+              <input value={chatInput} onChange={(e) => setChatInput(e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter') sendChat(); else if (socket) socket.emit('chatTyping', { roomId, userName: user.name }); }} placeholder="Type a message..." style={{ flex: 1, padding: '8px 10px', background: 'rgba(255,255,255,0.08)', border: '1px solid rgba(255,255,255,0.2)', borderRadius: 6, color: '#ecf0f1' }} />
               <button onClick={sendChat} className="copy-button">Send</button>
             </div>
           </div>
@@ -504,17 +778,33 @@ const EditorComponent = ({ user }) => {
           <div style={{ flex: 1, minHeight: 0 }}>
             <h4 style={{ margin: 0, color: '#ecf0f1' }}>Session Logs</h4>
             <div style={{ height: 180, overflowY: 'auto', border: '1px solid rgba(255,255,255,0.15)', borderRadius: 8, padding: 8, background: 'rgba(255,255,255,0.05)' }}>
-              {logs.map((e, idx) => (
-                <div key={idx} style={{ fontSize: 12, marginBottom: 4, color: '#bdc3c7' }}>
-                  <span style={{ color: '#7f8c8d' }}>[{new Date(e.timestamp || Date.now()).toLocaleTimeString()}]</span>
-                  <span style={{ marginLeft: 6 }}>
-                    {e.type === 'run' && `${e.user} executed code`}
-                    {e.type === 'chat' && `${e.user}: ${e.message}`}
-                    {e.type === 'leave' && `${e.user} left the room`}
-                    {!e.type && e.message}
-                  </span>
-                </div>
-              ))}
+              {logs.map((e, idx) => {
+                const logUserColor = e.user ? getUserChatColor(e.user) : '#bdc3c7';
+                return (
+                  <div key={idx} style={{ fontSize: 12, marginBottom: 4 }}>
+                    <span style={{ color: '#7f8c8d' }}>[{new Date(e.timestamp || Date.now()).toLocaleTimeString()}]</span>
+                    <span style={{ marginLeft: 6 }}>
+                      {e.type === 'run' && (
+                        <span style={{ color: '#bdc3c7' }}>
+                          <span style={{ color: logUserColor, fontWeight: '600' }}>{e.user}</span> executed code
+                        </span>
+                      )}
+                      {e.type === 'chat' && (
+                        <span>
+                          <span style={{ color: logUserColor, fontWeight: '600' }}>{e.user}</span>
+                          <span style={{ color: '#bdc3c7' }}>: {e.message}</span>
+                        </span>
+                      )}
+                      {e.type === 'leave' && (
+                        <span style={{ color: '#bdc3c7' }}>
+                          <span style={{ color: logUserColor, fontWeight: '600' }}>{e.user}</span> left the room
+                        </span>
+                      )}
+                      {!e.type && <span style={{ color: '#bdc3c7' }}>{e.message}</span>}
+                    </span>
+                  </div>
+                );
+              })}
               {logs.length === 0 && <div style={{ color: '#7f8c8d' }}>No activity yet</div>}
             </div>
           </div>

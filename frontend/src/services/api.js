@@ -27,6 +27,17 @@ api.interceptors.request.use(
 api.interceptors.response.use(
   (response) => response,
   (error) => {
+    // Handle network errors (server not reachable)
+    if (error.code === 'ECONNREFUSED' || error.code === 'ERR_NETWORK' || !error.response) {
+      const normalized = {
+        status: 0,
+        data: null,
+        message: 'Unable to connect to server. Please ensure the backend server is running on port 5001.',
+      };
+      console.error('Network error:', error.message);
+      return Promise.reject(normalized);
+    }
+    
     const normalized = {
       status: error?.response?.status,
       data: error?.response?.data,

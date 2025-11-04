@@ -14,7 +14,9 @@ const app = express();
 
 // Get allowed origins from environment variable or use defaults
 const allowedOrigins = process.env.FRONTEND_URL 
-  ? process.env.FRONTEND_URL.split(',') 
+  ? process.env.FRONTEND_URL.split(',').map(url => url.trim())
+  : process.env.NODE_ENV === 'production'
+  ? [] // Will be set in production
   : ["http://localhost:5173", "http://127.0.0.1:5173"];
 
 // Middleware
@@ -51,7 +53,11 @@ const io = new Server(server, {
   cors: {
     origin: function(origin, callback) {
       if (!origin) return callback(null, true);
-      if (allowedOrigins.indexOf(origin) === -1) {
+      const isAllowed = allowedOrigins.includes(origin) || 
+                       allowedOrigins.length === 0 || // Allow all in production if no specific origins set
+                       (process.env.NODE_ENV !== 'production');
+      if (!isAllowed) {
+        console.log('Socket.IO CORS blocked origin:', origin);
         return callback(new Error('CORS policy violation'), false);
       }
       return callback(null, true);
@@ -69,7 +75,26 @@ io.on('connection', (socket) => {
   let currentUserName = null;
 
   socket.on('join', ({ roomId, userName }) => {
-    if (!roomId || !userName) return;
+    if (!roomId || !userName) {
+      console.log('Join rejected: missing roomId or userName', { roomId, userName });
+      return;
+    }
+
+    console.log(`User ${userName} joining room ${roomId}`);
+    
+    // Leave previous room if any
+    if (currentRoomId && currentRoomId !== roomId) {
+      socket.leave(currentRoomId);
+      const prevUsers = roomIdToUsers.get(currentRoomId);
+      if (prevUsers) {
+        prevUsers.delete(currentUserName);
+        if (prevUsers.size > 0) {
+          io.to(currentRoomId).emit('userJoined', Array.from(prevUsers));
+        } else {
+          roomIdToUsers.delete(currentRoomId);
+        }
+      }
+    }
 
     currentRoomId = roomId;
     currentUserName = userName;
@@ -80,6 +105,9 @@ io.on('connection', (socket) => {
     users.add(userName);
     roomIdToUsers.set(roomId, users);
 
+    console.log(`Room ${roomId} now has users:`, Array.from(users));
+    
+    // Emit to all users in the room (including the one who just joined)
     io.to(roomId).emit('userJoined', Array.from(users));
   });
 
@@ -154,6 +182,130 @@ io.on('connection', (socket) => {
   socket.on('runExecuted', ({ roomId, userName }) => {
     if (!roomId) return;
     io.to(roomId).emit('sessionLog', { type: 'run', user: userName, timestamp: Date.now() });
+  });
+
+  // Code execution
+  socket.on('compileCode', async ({ code, language, input, roomId }) => {
+    if (!code || !language || !roomId) {
+      console.log('Code execution rejected: missing parameters');
+      return;
+    }
+
+    console.log(`Executing ${language} code in room ${roomId}`);
+    console.log('Code snippet:', code.substring(0, 100) + '...');
+    
+    try {
+      // Map language names to Piston API language IDs
+      const languageMap = {
+        'javascript': 'javascript',
+        'python': 'python',
+        'java': 'java',
+        'cpp': 'cpp',
+        'c++': 'cpp',
+        'c': 'c',
+        'typescript': 'typescript',
+        'go': 'go',
+        'rust': 'rust',
+        'ruby': 'ruby',
+        'php': 'php',
+      };
+
+      const pistonLanguage = languageMap[language.toLowerCase()] || 'javascript';
+      
+      // Prepare files array - Java needs a filename
+      let files = [];
+      if (pistonLanguage === 'java') {
+        // Extract class name from code or default to Main
+        const classMatch = code.match(/public\s+class\s+(\w+)/);
+        const className = classMatch ? classMatch[1] : 'Main';
+        files = [{
+          name: `${className}.java`,
+          content: code
+        }];
+        console.log(`Java file prepared: ${className}.java`);
+      } else {
+        files = [{
+          content: code
+        }];
+      }
+      
+      const requestBody = {
+        language: pistonLanguage,
+        version: '*',
+        files: files,
+        stdin: input || '',
+      };
+      
+      console.log('Sending request to Piston API:', JSON.stringify(requestBody, null, 2));
+      
+      // Execute code using Piston API (free, no API key needed)
+      const response = await axios.post('https://emkc.org/api/v2/piston/execute', requestBody, {
+        timeout: 15000, // 15 second timeout for compilation
+      });
+
+      console.log('Piston API full response:', JSON.stringify(response.data, null, 2));
+
+      // Check response structure
+      const compileOutput = response.data.compile || {};
+      const runOutput = response.data.run || {};
+      
+      console.log('Compile output:', compileOutput);
+      console.log('Run output:', runOutput);
+
+      // Handle compilation errors
+      if (compileOutput.stderr) {
+        console.log(`Compilation error for room ${roomId}:`, compileOutput.stderr);
+        io.to(roomId).emit('codeResponse', {
+          run: {
+            output: `Compilation Error:\n${compileOutput.stderr}`,
+            exitCode: compileOutput.code || 1,
+          }
+        });
+        return;
+      }
+
+      // Get output from multiple possible locations
+      let output = '';
+      if (runOutput.stdout) {
+        output = runOutput.stdout;
+      } else if (runOutput.stderr) {
+        output = runOutput.stderr;
+      } else if (runOutput.output) {
+        output = runOutput.output;
+      } else if (compileOutput.stdout) {
+        output = compileOutput.stdout;
+      } else {
+        output = 'No output received from execution';
+      }
+
+      const exitCode = runOutput.code !== undefined ? runOutput.code : (compileOutput.code !== undefined ? compileOutput.code : 0);
+
+      console.log(`Code execution result for room ${roomId}:`, {
+        exitCode: exitCode,
+        hasOutput: !!output,
+        outputLength: output?.length || 0,
+        outputPreview: output.substring(0, 100)
+      });
+      
+      // Emit result back to the room
+      io.to(roomId).emit('codeResponse', {
+        run: {
+          output: output.trim() || 'Code executed but produced no visible output.',
+          exitCode: exitCode,
+        }
+      });
+    } catch (error) {
+      console.error('Code execution error:', error.message);
+      console.error('Error details:', error.response?.data || error.stack);
+      
+      // Emit error to the room
+      io.to(roomId).emit('codeResponse', {
+        run: {
+          output: `Execution Error: ${error.message || 'Failed to execute code. Please try again.'}\n${error.response?.data ? JSON.stringify(error.response.data) : ''}`,
+          exitCode: 1,
+        }
+      });
+    }
   });
 });
 
