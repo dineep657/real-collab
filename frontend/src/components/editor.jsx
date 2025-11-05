@@ -284,33 +284,71 @@ const EditorComponent = ({ user, setUser }) => {
 
   const joinRoom = () => {
     const effectiveName = (user?.name || "").trim();
-    if (!roomId || !effectiveName || !user || !socket) {
-      if (!socket) {
-        alert('Please wait for connection to establish...');
-      }
+    
+    if (!roomId || !roomId.trim()) {
+      alert('Please enter a room ID or create a new room');
       return;
     }
+    
+    if (!effectiveName || !user) {
+      alert('User information is missing. Please log in again.');
+      return;
+    }
+    
+    if (!socket) {
+      alert('Socket not initialized. Please wait and try again.');
+      return;
+    }
+    
+    console.log('Attempting to join room:', roomId, 'as user:', effectiveName, 'Socket connected:', socket.connected);
     
     // Wait for socket to be connected
     if (!socket.connected) {
       console.log('Waiting for socket connection...');
-      socket.once('connect', () => {
+      let timeoutId = null;
+      
+      const connectHandler = () => {
+        if (timeoutId) clearTimeout(timeoutId);
         console.log('Socket connected, joining room now');
-        joinRoom();
-      });
+        // Retry joining after connection
+        setTimeout(() => {
+          joinRoom();
+        }, 100);
+      };
+      
+      timeoutId = setTimeout(() => {
+        socket.off('connect', connectHandler);
+        alert('Connection timeout. Please check your internet connection and try again.');
+      }, 10000); // 10 second timeout
+      
+      socket.once('connect', connectHandler);
+      
+      // Also handle connection errors
+      const errorHandler = () => {
+        if (timeoutId) clearTimeout(timeoutId);
+        socket.off('connect', connectHandler);
+        alert('Failed to connect to server. Please check your internet connection.');
+      };
+      
+      socket.once('connect_error', errorHandler);
+      
       return;
     }
     
-    console.log('Attempting to join room:', roomId, 'as user:', effectiveName);
-    
     // Set joined immediately to show UI
     setJoined(true);
-    sessionStorage.setItem('roomId', roomId);
+    sessionStorage.setItem('roomId', roomId.trim());
     sessionStorage.setItem('userName', effectiveName);
     
     // Emit join - socket is connected
-    socket.emit("join", { roomId, userName: effectiveName });
-    console.log('Join event emitted for room:', roomId);
+    try {
+      socket.emit("join", { roomId: roomId.trim(), userName: effectiveName });
+      console.log('Join event emitted for room:', roomId.trim());
+    } catch (error) {
+      console.error('Error emitting join event:', error);
+      setJoined(false);
+      alert('Failed to join room. Please try again.');
+    }
   };
 
   const leaveRoom = () => {
@@ -632,12 +670,24 @@ echo "Code executed successfully!" . PHP_EOL;
             style={{ marginBottom: '0.5rem' }}
           />
           <button onClick={createRoomId} style={{ marginBottom: '0.5rem' }}>Create New Room</button>
-          <button onClick={joinRoom} disabled={!roomId || !socket}>
-            {socket ? 'Join Room' : 'Connecting...'}
+          <button 
+            onClick={joinRoom} 
+            disabled={!roomId || !roomId.trim() || !user}
+            style={{
+              opacity: (!roomId || !roomId.trim() || !user) ? 0.5 : 1,
+              cursor: (!roomId || !roomId.trim() || !user) ? 'not-allowed' : 'pointer'
+            }}
+          >
+            {socket && socket.connected ? 'Join Room' : socket ? 'Connecting...' : 'Initializing...'}
           </button>
-          {!socket && (
+          {socket && !socket.connected && (
             <p style={{ color: '#ffa500', fontSize: '0.9rem', marginTop: '0.5rem' }}>
               Waiting for server connection...
+            </p>
+          )}
+          {!socket && (
+            <p style={{ color: '#ffa500', fontSize: '0.9rem', marginTop: '0.5rem' }}>
+              Initializing connection...
             </p>
           )}
           <button 
