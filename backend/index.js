@@ -35,16 +35,29 @@ app.use(cors({
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 // Conditionally enable auth endpoints to avoid database usage when disabled
-if (process.env.DISABLE_AUTH === 'true') {
-  app.use('/api/auth', (_req, res) => {
-    res.status(503).json({ success: false, message: 'Auth is disabled' });
-  });
-} else {
-  // Dynamic import to avoid loading DB modules when auth is disabled
-  const authModule = await import('./routes/auth.js');
-  authRoutes = authModule.default;
-  app.use('/api/auth', authRoutes);
-}
+(async () => {
+  if (process.env.DISABLE_AUTH === 'true') {
+    app.use('/api/auth', (_req, res) => {
+      res.status(503).json({ success: false, message: 'Auth is disabled' });
+    });
+  } else {
+    try {
+      // Dynamic import to avoid loading DB modules when auth is disabled
+      const authModule = await import('./routes/auth.js');
+      authRoutes = authModule.default;
+      app.use('/api/auth', authRoutes);
+    } catch (error) {
+      console.error('⚠️  Failed to load auth routes:', error.message);
+      console.log('💡 Tip: Set DISABLE_AUTH=true to skip database authentication');
+      app.use('/api/auth', (_req, res) => {
+        res.status(503).json({ 
+          success: false, 
+          message: 'Authentication service unavailable. Please set DISABLE_AUTH=true or configure database.' 
+        });
+      });
+    }
+  }
+})();
 
 // Health check endpoint
 app.get('/api/health', (req, res) => {

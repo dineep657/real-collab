@@ -30,11 +30,8 @@ const EditorComponent = ({ user, setUser }) => {
   const chatUserColorsRef = useRef({}); // userName -> chat color
   const [userInput, setUserInput] = useState("");
   const [role, setRole] = useState("editor"); // viewer disables edits
-  const [name, setName] = useState("");
-
-  useEffect(() => {
-    if (user?.name && !name) setName(user.name);
-  }, [user]);
+  // Use user's login name directly, no editing allowed
+  const name = user?.name || "";
 
   // simple multi-file tabs
   const [files, setFiles] = useState([
@@ -256,21 +253,14 @@ const EditorComponent = ({ user, setUser }) => {
   }, [socket]);
 
   const joinRoom = () => {
-    const effectiveName = (name || "").trim();
-    if (!roomId || !effectiveName || !user || !socket || !socketConnected) {
-      if (!socketConnected) {
+    const effectiveName = (user?.name || "").trim();
+    if (!roomId || !effectiveName || !user || !socket) {
+      if (!socket) {
         alert('Please wait for connection to establish...');
       }
       return;
     }
     
-    // persist name to local storage and App state if changed
-    if (effectiveName !== user.name) {
-      const updated = { ...user, name: effectiveName };
-      localStorage.setItem('guest_user', JSON.stringify(updated));
-      try { setUser && setUser(updated); } catch {}
-    }
-
     console.log('Attempting to join room:', roomId, 'as user:', effectiveName);
     
     // Set joined immediately to show UI
@@ -278,12 +268,12 @@ const EditorComponent = ({ user, setUser }) => {
     sessionStorage.setItem('roomId', roomId);
     sessionStorage.setItem('userName', effectiveName);
     
-    // Emit join immediately
-    if (socket && socket.connected) {
+    // Emit join - socket will handle connection state
+    if (socket) {
       socket.emit("join", { roomId, userName: effectiveName });
       console.log('Join event emitted for room:', roomId);
     } else {
-      console.error('Socket not connected, cannot join room');
+      console.error('Socket not available, cannot join room');
       setJoined(false);
     }
   };
@@ -309,7 +299,7 @@ const EditorComponent = ({ user, setUser }) => {
     setCode(newCode);
     setFiles((fs) => fs.map(f => f.id === activeFileId ? { ...f, content: newCode, language } : f));
     socket.emit("codeChange", { roomId, code: newCode });
-    socket.emit("typing", { roomId, userName: (name || user.name) });
+    socket.emit("typing", { roomId, userName: user?.name || '' });
   };
 
   const handleEditorMount = (editor) => {
@@ -319,13 +309,13 @@ const EditorComponent = ({ user, setUser }) => {
     
     editor.onDidChangeCursorPosition((e) => {
       if (socket) {
-        socket.emit('cursorMove', { roomId, userName: (name || user.name), position: e.position });
+        socket.emit('cursorMove', { roomId, userName: user?.name || '', position: e.position });
       }
     });
     editor.onDidChangeCursorSelection((e) => {
       if (!socket) return;
       const s = e.selection;
-      socket.emit('selectionChange', { roomId, userName: (name || user.name), selection: {
+      socket.emit('selectionChange', { roomId, userName: user?.name || '', selection: {
         startLineNumber: s.startLineNumber,
         startColumn: s.startColumn,
         endLineNumber: s.endLineNumber,
@@ -352,7 +342,7 @@ const EditorComponent = ({ user, setUser }) => {
   const sendChat = () => {
     const message = chatInput.trim();
     if (!message || !socket) return;
-    socket.emit('chatMessage', { roomId, userName: (name || user.name), message });
+    socket.emit('chatMessage', { roomId, userName: user?.name || '', message });
     setChatInput('');
   };
 
@@ -499,7 +489,7 @@ echo "Code executed successfully!" . PHP_EOL;
       version,
       input: userInput,
     });
-    socket.emit('runExecuted', { roomId, userName: (name || user.name) });
+    socket.emit('runExecuted', { roomId, userName: user?.name || '' });
   };
 
   // Tabs helpers
@@ -568,26 +558,29 @@ echo "Code executed successfully!" . PHP_EOL;
             fontSize: '1.1rem',
             fontWeight: '500'
           }}>
-            Enter your name to join
+            Join as {user?.name || 'User'}
           </p>
-          <input
-            type="text"
-            placeholder="Your name"
-            value={name}
-            onChange={(e) => setName(e.target.value)}
-            style={{ marginBottom: '0.5rem' }}
-          />
+          <div style={{ marginBottom: '1rem', padding: '0.75rem', background: 'rgba(255, 255, 255, 0.1)', borderRadius: '8px' }}>
+            <label style={{ display: 'block', color: 'rgba(255, 255, 255, 0.8)', fontSize: '0.875rem', marginBottom: '0.5rem' }}>Your Name</label>
+            <div style={{ color: 'white', fontSize: '1rem', fontWeight: '500' }}>{user?.name || 'User'}</div>
+          </div>
           <input
             type="text"
             placeholder="Enter Room ID"
             value={roomId}
             onChange={(e) => setRoomId(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter' && roomId && socket) {
+                joinRoom();
+              }
+            }}
+            style={{ marginBottom: '0.5rem' }}
           />
-          <button onClick={createRoomId}>Create New Room</button>
-          <button onClick={joinRoom} disabled={!roomId || !socketConnected}>
-            {socketConnected ? 'Join Room' : 'Connecting...'}
+          <button onClick={createRoomId} style={{ marginBottom: '0.5rem' }}>Create New Room</button>
+          <button onClick={joinRoom} disabled={!roomId || !socket}>
+            {socket ? 'Join Room' : 'Connecting...'}
           </button>
-          {!socketConnected && (
+          {!socket && (
             <p style={{ color: '#ffa500', fontSize: '0.9rem', marginTop: '0.5rem' }}>
               Waiting for server connection...
             </p>
@@ -634,7 +627,7 @@ echo "Code executed successfully!" . PHP_EOL;
             fontSize: '1rem',
             fontWeight: '500'
           }}>
-            {name || user.name}
+            {user?.name || 'User'}
           </p>
           <div style={{ marginTop: 6, color: '#bdc3c7' }}>Role: <strong>{role}</strong></div>
         </div>
@@ -644,7 +637,7 @@ echo "Code executed successfully!" . PHP_EOL;
           {users.map((userName, index) => (
             <li key={index}>
               {userName}
-              {userName === (name || user.name) && (
+              {userName === (user?.name || '') && (
                 <span style={{ 
                   marginLeft: '0.5rem', 
                   color: '#2ecc71',
@@ -790,7 +783,7 @@ echo "Code executed successfully!" . PHP_EOL;
               {chat.length === 0 && <div style={{ color: '#7f8c8d', fontSize: 12 }}>No messages yet</div>}
             </div>
             <div style={{ display: 'flex', gap: 6, marginTop: 6 }}>
-              <input value={chatInput} onChange={(e) => setChatInput(e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter') sendChat(); else if (socket) socket.emit('chatTyping', { roomId, userName: user.name }); }} placeholder="Type a message..." style={{ flex: 1, padding: '8px 10px', background: 'rgba(255,255,255,0.08)', border: '1px solid rgba(255,255,255,0.2)', borderRadius: 6, color: '#ecf0f1' }} />
+              <input value={chatInput} onChange={(e) => setChatInput(e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter') sendChat(); else if (socket) socket.emit('chatTyping', { roomId, userName: user?.name || '' }); }} placeholder="Type a message..." style={{ flex: 1, padding: '8px 10px', background: 'rgba(255,255,255,0.08)', border: '1px solid rgba(255,255,255,0.2)', borderRadius: 6, color: '#ecf0f1' }} />
               <button onClick={sendChat} className="copy-button">Send</button>
             </div>
           </div>

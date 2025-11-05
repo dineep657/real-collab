@@ -2,17 +2,25 @@ import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-d
 import { useState, useEffect } from 'react';
 import Home from './components/home';
 import Editor from './components/editor';
-// Auth disabled: prompt for name and allow entry without signup/login
+import Login from './components/login';
+import Signup from './components/signup';
 
 function App() {
   const [user, setUser] = useState(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    // If a name was previously entered, restore it
-    const existing = localStorage.getItem('guest_user');
-    if (existing) {
-      setUser(JSON.parse(existing));
+    // Check for logged-in user from localStorage
+    const token = localStorage.getItem('token');
+    const userData = localStorage.getItem('user');
+    if (token && userData) {
+      try {
+        setUser(JSON.parse(userData));
+      } catch (e) {
+        console.error('Error parsing user data:', e);
+        localStorage.removeItem('token');
+        localStorage.removeItem('user');
+      }
     }
     setLoading(false);
   }, []);
@@ -37,7 +45,9 @@ function App() {
     <Router>
       <Routes>
         <Route path="/" element={<Home user={user} setUser={setUser} />} />
-        <Route path="/editor" element={user ? <Editor user={user} setUser={setUser} /> : <Navigate to="/" />} />
+        <Route path="/login" element={<Login setUser={setUser} />} />
+        <Route path="/signup" element={<Signup setUser={setUser} />} />
+        <Route path="/editor" element={user ? <Editor user={user} setUser={setUser} /> : <Navigate to="/login" />} />
         <Route path="*" element={<Navigate to="/" />} />
       </Routes>
     </Router>

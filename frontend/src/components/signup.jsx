@@ -18,6 +18,18 @@ const Signup = ({ setUser }) => {
       return;
     }
 
+    // Validate name - no numbers allowed
+    if (/\d/.test(name)) {
+      setError('Name cannot contain numbers');
+      return;
+    }
+
+    // Validate name - should contain only letters and spaces
+    if (!/^[a-zA-Z\s]+$/.test(name.trim())) {
+      setError('Name can only contain letters and spaces');
+      return;
+    }
+
     if (password !== confirmPassword) {
       setError('Passwords do not match!');
       return;
@@ -188,7 +200,11 @@ const Signup = ({ setUser }) => {
             <input
               type="text"
               value={name}
-              onChange={(e) => setName(e.target.value)}
+              onChange={(e) => {
+                // Prevent numbers from being entered
+                const value = e.target.value.replace(/\d/g, '');
+                setName(value);
+              }}
               placeholder="John Doe"
               style={styles.input}
               disabled={loading}

@@ -3,18 +3,6 @@ import { Code2, Users, Zap, Globe } from 'lucide-react';
 
 const Home = ({ user, setUser }) => {
   const navigate = useNavigate();
-  const setLocalUser = (name) => {
-    const u = { id: 'guest', name: name.trim() };
-    localStorage.setItem('guest_user', JSON.stringify(u));
-    return u;
-  };
-
-  const handleLogout = () => {
-    localStorage.removeItem('token');
-    localStorage.removeItem('user');
-    setUser(null);
-    navigate('/');
-  };
 
   const styles = {
     container: {
@@ -64,47 +52,57 @@ const Home = ({ user, setUser }) => {
     },
     hero: {
       textAlign: 'center',
-      padding: '4rem 2rem',
-      maxWidth: '900px',
+      padding: '6rem 2rem 4rem',
+      maxWidth: '1000px',
       margin: '0 auto',
     },
     title: {
-      fontSize: '3.5rem',
+      fontSize: 'clamp(2.5rem, 5vw, 4rem)',
       fontWeight: 'bold',
       marginBottom: '1.5rem',
       lineHeight: '1.2',
+      background: 'linear-gradient(to right, #ffffff, #e0e7ff)',
+      WebkitBackgroundClip: 'text',
+      WebkitTextFillColor: 'transparent',
+      backgroundClip: 'text',
     },
     subtitle: {
-      fontSize: '1.25rem',
-      marginBottom: '2.5rem',
-      opacity: '0.9',
-      lineHeight: '1.6',
+      fontSize: 'clamp(1.125rem, 2vw, 1.5rem)',
+      marginBottom: '3rem',
+      opacity: '0.95',
+      lineHeight: '1.7',
+      maxWidth: '700px',
+      marginLeft: 'auto',
+      marginRight: 'auto',
     },
     ctaButton: {
-      padding: '1rem 2.5rem',
+      padding: '1.125rem 2.75rem',
       background: 'white',
       color: '#7c3aed',
       border: 'none',
-      borderRadius: '0.5rem',
+      borderRadius: '0.75rem',
       fontSize: '1.125rem',
       fontWeight: '600',
       cursor: 'pointer',
       transition: 'all 0.3s ease',
+      boxShadow: '0 4px 20px rgba(0, 0, 0, 0.15)',
     },
     features: {
       display: 'grid',
-      gridTemplateColumns: 'repeat(auto-fit, minmax(250px, 1fr))',
+      gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))',
       gap: '2rem',
       maxWidth: '1200px',
-      margin: '4rem auto',
+      margin: '5rem auto',
       padding: '0 2rem',
     },
     featureCard: {
       background: 'rgba(255, 255, 255, 0.1)',
       backdropFilter: 'blur(16px)',
-      padding: '2rem',
-      borderRadius: '1rem',
+      padding: '2.5rem',
+      borderRadius: '1.25rem',
       border: '1px solid rgba(255, 255, 255, 0.2)',
+      transition: 'all 0.3s ease',
+      cursor: 'default',
     },
     featureIcon: {
       width: '48px',
@@ -122,14 +120,18 @@ const Home = ({ user, setUser }) => {
     },
     section: {
       maxWidth: '1200px',
-      margin: '4rem auto',
+      margin: '5rem auto',
       padding: '0 2rem',
     },
     sectionTitle: {
       textAlign: 'center',
-      fontSize: '2rem',
+      fontSize: 'clamp(1.75rem, 3vw, 2.5rem)',
       fontWeight: '700',
-      marginBottom: '2rem',
+      marginBottom: '3rem',
+      background: 'linear-gradient(to right, #ffffff, #e0e7ff)',
+      WebkitBackgroundClip: 'text',
+      WebkitTextFillColor: 'transparent',
+      backgroundClip: 'text',
     },
     steps: {
       display: 'grid',
@@ -140,7 +142,9 @@ const Home = ({ user, setUser }) => {
       background: 'rgba(255, 255, 255, 0.08)',
       border: '1px solid rgba(255, 255, 255, 0.2)',
       borderRadius: '1rem',
-      padding: '1.5rem',
+      padding: '2rem',
+      transition: 'all 0.3s ease',
+      cursor: 'default',
     },
     stepNum: {
       display: 'inline-block',
@@ -159,15 +163,17 @@ const Home = ({ user, setUser }) => {
     testimonialCard: {
       background: 'rgba(255, 255, 255, 0.08)',
       border: '1px solid rgba(255, 255, 255, 0.2)',
-      borderRadius: '1rem',
-      padding: '1.5rem',
+      borderRadius: '1.25rem',
+      padding: '2rem',
       lineHeight: '1.7',
+      transition: 'all 0.3s ease',
+      cursor: 'default',
     },
     footer: {
-      marginTop: '4rem',
-      padding: '2rem',
+      marginTop: '6rem',
+      padding: '3rem 2rem',
       borderTop: '1px solid rgba(255, 255, 255, 0.2)',
-      background: 'rgba(0, 0, 0, 0.15)',
+      background: 'rgba(0, 0, 0, 0.2)',
     },
     footerInner: {
       maxWidth: '1200px',
@@ -176,12 +182,24 @@ const Home = ({ user, setUser }) => {
       flexWrap: 'wrap',
       alignItems: 'center',
       justifyContent: 'space-between',
-      gap: '1rem',
+      gap: '2rem',
     },
     footerLinks: {
       display: 'flex',
-      gap: '1rem',
+      gap: '1.5rem',
       opacity: 0.9,
+      flexWrap: 'wrap',
+    },
+    footerLink: {
+      color: 'rgba(255, 255, 255, 0.9)',
+      background: 'none',
+      border: 'none',
+      cursor: 'pointer',
+      fontSize: '0.95rem',
+      fontWeight: '500',
+      transition: 'all 0.3s ease',
+      padding: '0.5rem 0',
+      textDecoration: 'none',
     },
   };
 
@@ -199,6 +217,17 @@ const Home = ({ user, setUser }) => {
                 Welcome, {user.name}
               </span>
               <button
+                onClick={() => {
+                  localStorage.removeItem('token');
+                  localStorage.removeItem('user');
+                  setUser(null);
+                  navigate('/');
+                }}
+                style={{ ...styles.loginButton, cursor: 'pointer' }}
+              >
+                Logout
+              </button>
+              <button
                 onClick={() => navigate('/editor')}
                 style={styles.signupButton}
                 onMouseEnter={(e) => e.target.style.transform = 'translateY(-2px)'}
@@ -207,7 +236,26 @@ const Home = ({ user, setUser }) => {
                 Open Editor
               </button>
             </>
-          ) : null}
+          ) : (
+            <>
+              <button
+                onClick={() => navigate('/login')}
+                style={styles.loginButton}
+                onMouseEnter={(e) => e.target.style.transform = 'translateY(-2px)'}
+                onMouseLeave={(e) => e.target.style.transform = 'translateY(0)'}
+              >
+                Login
+              </button>
+              <button
+                onClick={() => navigate('/signup')}
+                style={styles.signupButton}
+                onMouseEnter={(e) => e.target.style.transform = 'translateY(-2px)'}
+                onMouseLeave={(e) => e.target.style.transform = 'translateY(0)'}
+              >
+                Sign Up
+              </button>
+            </>
+          )}
         </div>
       </nav>
 
@@ -218,47 +266,7 @@ const Home = ({ user, setUser }) => {
           live code execution, and seamless team communication.
         </p>
 
-        {!user ? (
-          <div style={{ maxWidth: 420, margin: '0 auto', display: 'flex', gap: '0.75rem', alignItems: 'center', justifyContent: 'center' }}>
-            <input
-              type="text"
-              placeholder="Enter your name"
-              style={{
-                padding: '0.875rem 1rem',
-                borderRadius: '0.5rem',
-                border: '1px solid rgba(255,255,255,0.3)',
-                background: 'rgba(255,255,255,0.1)',
-                color: 'white',
-                flex: 1,
-              }}
-              onKeyDown={(e) => {
-                if (e.key === 'Enter') {
-                  const name = e.currentTarget.value.trim();
-                  if (name) {
-                    const u = setLocalUser(name);
-                    setUser(u);
-                    navigate('/editor');
-                  }
-                }
-              }}
-              id="name-input"
-            />
-            <button
-              style={styles.ctaButton}
-              onClick={() => {
-                const el = document.getElementById('name-input');
-                const name = el?.value.trim();
-                if (name) {
-                  const u = setLocalUser(name);
-                  setUser(u);
-                  navigate('/editor');
-                }
-              }}
-            >
-              Continue
-            </button>
-          </div>
-        ) : (
+        {user ? (
           <button
             onClick={() => navigate('/editor')}
             style={styles.ctaButton}
@@ -273,11 +281,38 @@ const Home = ({ user, setUser }) => {
           >
             Open Editor
           </button>
+        ) : (
+          <button
+            onClick={() => navigate('/login')}
+            style={styles.ctaButton}
+            onMouseEnter={(e) => {
+              e.target.style.transform = 'translateY(-4px)';
+              e.target.style.boxShadow = '0 10px 30px rgba(0, 0, 0, 0.3)';
+            }}
+            onMouseLeave={(e) => {
+              e.target.style.transform = 'translateY(0)';
+              e.target.style.boxShadow = 'none';
+            }}
+          >
+            Get Started
+          </button>
         )}
       </div>
 
       <div style={styles.features}>
-        <div style={styles.featureCard}>
+        <div 
+          style={styles.featureCard}
+          onMouseEnter={(e) => {
+            e.currentTarget.style.transform = 'translateY(-8px)';
+            e.currentTarget.style.background = 'rgba(255, 255, 255, 0.15)';
+            e.currentTarget.style.boxShadow = '0 10px 30px rgba(0, 0, 0, 0.2)';
+          }}
+          onMouseLeave={(e) => {
+            e.currentTarget.style.transform = 'translateY(0)';
+            e.currentTarget.style.background = 'rgba(255, 255, 255, 0.1)';
+            e.currentTarget.style.boxShadow = 'none';
+          }}
+        >
           <Users style={styles.featureIcon} />
           <h3 style={styles.featureTitle}>Real-time Collaboration</h3>
           <p style={styles.featureDescription}>
@@ -285,7 +320,19 @@ const Home = ({ user, setUser }) => {
           </p>
         </div>
 
-        <div style={styles.featureCard}>
+        <div 
+          style={styles.featureCard}
+          onMouseEnter={(e) => {
+            e.currentTarget.style.transform = 'translateY(-8px)';
+            e.currentTarget.style.background = 'rgba(255, 255, 255, 0.15)';
+            e.currentTarget.style.boxShadow = '0 10px 30px rgba(0, 0, 0, 0.2)';
+          }}
+          onMouseLeave={(e) => {
+            e.currentTarget.style.transform = 'translateY(0)';
+            e.currentTarget.style.background = 'rgba(255, 255, 255, 0.1)';
+            e.currentTarget.style.boxShadow = 'none';
+          }}
+        >
           <Zap style={styles.featureIcon} />
           <h3 style={styles.featureTitle}>Live Code Execution</h3>
           <p style={styles.featureDescription}>
@@ -293,7 +340,19 @@ const Home = ({ user, setUser }) => {
           </p>
         </div>
 
-        <div style={styles.featureCard}>
+        <div 
+          style={styles.featureCard}
+          onMouseEnter={(e) => {
+            e.currentTarget.style.transform = 'translateY(-8px)';
+            e.currentTarget.style.background = 'rgba(255, 255, 255, 0.15)';
+            e.currentTarget.style.boxShadow = '0 10px 30px rgba(0, 0, 0, 0.2)';
+          }}
+          onMouseLeave={(e) => {
+            e.currentTarget.style.transform = 'translateY(0)';
+            e.currentTarget.style.background = 'rgba(255, 255, 255, 0.1)';
+            e.currentTarget.style.boxShadow = 'none';
+          }}
+        >
           <Globe style={styles.featureIcon} />
           <h3 style={styles.featureTitle}>Multiple Languages</h3>
           <p style={styles.featureDescription}>
@@ -305,17 +364,53 @@ const Home = ({ user, setUser }) => {
       <section style={styles.section}>
         <h2 style={styles.sectionTitle}>How it works</h2>
         <div style={styles.steps}>
-          <div style={styles.stepCard}>
+          <div 
+            style={styles.stepCard}
+            onMouseEnter={(e) => {
+              e.currentTarget.style.transform = 'translateY(-5px)';
+              e.currentTarget.style.background = 'rgba(255, 255, 255, 0.12)';
+              e.currentTarget.style.boxShadow = '0 8px 25px rgba(0, 0, 0, 0.15)';
+            }}
+            onMouseLeave={(e) => {
+              e.currentTarget.style.transform = 'translateY(0)';
+              e.currentTarget.style.background = 'rgba(255, 255, 255, 0.08)';
+              e.currentTarget.style.boxShadow = 'none';
+            }}
+          >
             <div style={styles.stepNum}>1</div>
             <h3 style={styles.featureTitle}>Create or Join a Room</h3>
-            <p style={styles.featureDescription}>Spin up a new session or join your team’s workspace in seconds.</p>
+            <p style={styles.featureDescription}>Spin up a new session or join your team's workspace in seconds.</p>
           </div>
-          <div style={styles.stepCard}>
+          <div 
+            style={styles.stepCard}
+            onMouseEnter={(e) => {
+              e.currentTarget.style.transform = 'translateY(-5px)';
+              e.currentTarget.style.background = 'rgba(255, 255, 255, 0.12)';
+              e.currentTarget.style.boxShadow = '0 8px 25px rgba(0, 0, 0, 0.15)';
+            }}
+            onMouseLeave={(e) => {
+              e.currentTarget.style.transform = 'translateY(0)';
+              e.currentTarget.style.background = 'rgba(255, 255, 255, 0.08)';
+              e.currentTarget.style.boxShadow = 'none';
+            }}
+          >
             <div style={styles.stepNum}>2</div>
             <h3 style={styles.featureTitle}>Collaborate in Real-time</h3>
             <p style={styles.featureDescription}>Code together with instant syncing, cursors, and presence indicators.</p>
           </div>
-          <div style={styles.stepCard}>
+          <div 
+            style={styles.stepCard}
+            onMouseEnter={(e) => {
+              e.currentTarget.style.transform = 'translateY(-5px)';
+              e.currentTarget.style.background = 'rgba(255, 255, 255, 0.12)';
+              e.currentTarget.style.boxShadow = '0 8px 25px rgba(0, 0, 0, 0.15)';
+            }}
+            onMouseLeave={(e) => {
+              e.currentTarget.style.transform = 'translateY(0)';
+              e.currentTarget.style.background = 'rgba(255, 255, 255, 0.08)';
+              e.currentTarget.style.boxShadow = 'none';
+            }}
+          >
             <div style={styles.stepNum}>3</div>
             <h3 style={styles.featureTitle}>Run & Share</h3>
             <p style={styles.featureDescription}>Run code, review outputs, and share links with one click.</p>
@@ -326,17 +421,53 @@ const Home = ({ user, setUser }) => {
       <section style={styles.section}>
         <h2 style={styles.sectionTitle}>Loved by teams</h2>
         <div style={styles.testimonials}>
-          <div style={styles.testimonialCard}>
-            “CodeCollab helped us ship features 2x faster. The real-time editor is a game changer.”
-            <div style={{ marginTop: '0.75rem', opacity: 0.85 }}>— Priya, Frontend Lead</div>
+          <div 
+            style={styles.testimonialCard}
+            onMouseEnter={(e) => {
+              e.currentTarget.style.transform = 'translateY(-5px)';
+              e.currentTarget.style.background = 'rgba(255, 255, 255, 0.12)';
+              e.currentTarget.style.boxShadow = '0 8px 25px rgba(0, 0, 0, 0.15)';
+            }}
+            onMouseLeave={(e) => {
+              e.currentTarget.style.transform = 'translateY(0)';
+              e.currentTarget.style.background = 'rgba(255, 255, 255, 0.08)';
+              e.currentTarget.style.boxShadow = 'none';
+            }}
+          >
+            "CodeCollab helped us ship features 2x faster. The real-time editor is a game changer."
+            <div style={{ marginTop: '0.75rem', opacity: 0.85, fontWeight: '500' }}>— dineep</div>
           </div>
-          <div style={styles.testimonialCard}>
-            “Pair programming feels natural and smooth. We use it daily for reviews.”
-            <div style={{ marginTop: '0.75rem', opacity: 0.85 }}>— Ahmed, Senior Engineer</div>
+          <div 
+            style={styles.testimonialCard}
+            onMouseEnter={(e) => {
+              e.currentTarget.style.transform = 'translateY(-5px)';
+              e.currentTarget.style.background = 'rgba(255, 255, 255, 0.12)';
+              e.currentTarget.style.boxShadow = '0 8px 25px rgba(0, 0, 0, 0.15)';
+            }}
+            onMouseLeave={(e) => {
+              e.currentTarget.style.transform = 'translateY(0)';
+              e.currentTarget.style.background = 'rgba(255, 255, 255, 0.08)';
+              e.currentTarget.style.boxShadow = 'none';
+            }}
+          >
+            "Pair programming feels natural and smooth. We use it daily for reviews."
+            <div style={{ marginTop: '0.75rem', opacity: 0.85, fontWeight: '500' }}>— saiteja</div>
           </div>
-          <div style={styles.testimonialCard}>
-            “Perfect for bootcamps and workshops. Students love the instant feedback.”
-            <div style={{ marginTop: '0.75rem', opacity: 0.85 }}>— Maria, Instructor</div>
+          <div 
+            style={styles.testimonialCard}
+            onMouseEnter={(e) => {
+              e.currentTarget.style.transform = 'translateY(-5px)';
+              e.currentTarget.style.background = 'rgba(255, 255, 255, 0.12)';
+              e.currentTarget.style.boxShadow = '0 8px 25px rgba(0, 0, 0, 0.15)';
+            }}
+            onMouseLeave={(e) => {
+              e.currentTarget.style.transform = 'translateY(0)';
+              e.currentTarget.style.background = 'rgba(255, 255, 255, 0.08)';
+              e.currentTarget.style.boxShadow = 'none';
+            }}
+          >
+            "Perfect for bootcamps and workshops. Students love the instant feedback."
+            <div style={{ marginTop: '0.75rem', opacity: 0.85, fontWeight: '500' }}>— saicharan</div>
           </div>
         </div>
       </section>
@@ -348,9 +479,54 @@ const Home = ({ user, setUser }) => {
             <span>CodeCollab</span>
           </div>
           <div style={styles.footerLinks}>
-            <button onClick={() => navigate('/editor')} style={{ ...styles.loginButton, background: 'transparent', border: 'none' }}>Editor</button>
+            <button 
+              onClick={() => navigate('/editor')} 
+              style={styles.footerLink}
+              onMouseEnter={(e) => {
+                e.target.style.color = '#ffffff';
+                e.target.style.transform = 'translateY(-2px)';
+              }}
+              onMouseLeave={(e) => {
+                e.target.style.color = 'rgba(255, 255, 255, 0.9)';
+                e.target.style.transform = 'translateY(0)';
+              }}
+            >
+              Editor
+            </button>
+            {!user && (
+              <button 
+                onClick={() => navigate('/login')} 
+                style={styles.footerLink}
+                onMouseEnter={(e) => {
+                  e.target.style.color = '#ffffff';
+                  e.target.style.transform = 'translateY(-2px)';
+                }}
+                onMouseLeave={(e) => {
+                  e.target.style.color = 'rgba(255, 255, 255, 0.9)';
+                  e.target.style.transform = 'translateY(0)';
+                }}
+              >
+                Login
+              </button>
+            )}
+            {user && (
+              <button 
+                onClick={() => navigate('/editor')} 
+                style={styles.footerLink}
+                onMouseEnter={(e) => {
+                  e.target.style.color = '#ffffff';
+                  e.target.style.transform = 'translateY(-2px)';
+                }}
+                onMouseLeave={(e) => {
+                  e.target.style.color = 'rgba(255, 255, 255, 0.9)';
+                  e.target.style.transform = 'translateY(0)';
+                }}
+              >
+                Dashboard
+              </button>
+            )}
           </div>
-          <div style={{ opacity: 0.7 }}>
+          <div style={{ opacity: 0.8, fontSize: '0.9rem' }}>
             © {new Date().getFullYear()} CodeCollab. All rights reserved.
           </div>
         </div>
