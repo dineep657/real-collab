@@ -52,9 +52,40 @@ const EditorComponent = ({ user, setUser }) => {
       reconnectionAttempts: 5
     });
 
+    // Register event listeners immediately
+    const handleUserJoined = (users) => {
+      console.log('User joined event received:', users);
+      if (Array.isArray(users)) {
+        setUsers(users);
+        
+        // Add log entry for each user joining
+        const currentUserList = users;
+        setLogs((l) => {
+          const newLog = { 
+            type: 'info', 
+            message: `Users in room: ${currentUserList.join(', ')} (${currentUserList.length} total)`, 
+            timestamp: Date.now() 
+          };
+          return [newLog, ...l];
+        });
+      } else {
+        console.error('Invalid users data received:', users);
+      }
+    };
+
+    newSocket.on('userJoined', handleUserJoined);
+
     newSocket.on('connect', () => {
       console.log('Socket connected');
       setSocketConnected(true);
+      
+      // Rejoin room if we were in one
+      const savedRoomId = sessionStorage.getItem('roomId');
+      const savedUserName = sessionStorage.getItem('userName');
+      if (savedRoomId && savedUserName && user && savedUserName === user.name) {
+        console.log('Rejoining room after reconnection:', savedRoomId);
+        newSocket.emit("join", { roomId: savedRoomId, userName: user.name });
+      }
     });
 
     newSocket.on('disconnect', () => {
@@ -70,6 +101,10 @@ const EditorComponent = ({ user, setUser }) => {
     setSocket(newSocket);
 
     return () => {
+      newSocket.off('userJoined', handleUserJoined);
+      newSocket.off('connect');
+      newSocket.off('disconnect');
+      newSocket.off('connect_error');
       newSocket.close();
     };
   }, [user]);
@@ -83,7 +118,7 @@ const EditorComponent = ({ user, setUser }) => {
 
   // Check for saved room on mount
   useEffect(() => {
-    if (!user || !socket || !socketConnected) return;
+    if (!user || !socket) return;
 
     const params = new URLSearchParams(window.location.search);
     const r = params.get('role');
@@ -96,35 +131,26 @@ const EditorComponent = ({ user, setUser }) => {
     if (savedRoomId && savedUserName === user.name) {
       console.log('Restoring saved room:', savedRoomId);
       setRoomId(savedRoomId);
-      setJoined(true);
       
-      // Join the room
-      if (socket.connected) {
-        socket.emit("join", { roomId: savedRoomId, userName: user.name });
-        console.log('Rejoined saved room:', savedRoomId);
-      }
+      // Wait for socket connection before joining
+      const tryJoin = () => {
+        if (socket.connected) {
+          setJoined(true);
+          socket.emit("join", { roomId: savedRoomId, userName: user.name });
+          console.log('Rejoined saved room:', savedRoomId);
+        } else {
+          socket.once('connect', tryJoin);
+        }
+      };
+      tryJoin();
     }
-  }, [user, socket, socketConnected]);
+  }, [user, socket]);
 
   useEffect(() => {
     if (!socket) return;
 
-    const handleUserJoined = (users) => {
-      console.log('User joined event received:', users);
-      setUsers(users);
-      
-      // Add log entry for each user joining
-      const currentUserList = users;
-      setLogs((l) => {
-        const newLog = { 
-          type: 'info', 
-          message: `Users in room: ${currentUserList.join(', ')} (${currentUserList.length} total)`, 
-          timestamp: Date.now() 
-        };
-        return [newLog, ...l];
-      });
-    };
-
+    // Note: handleUserJoined is registered in socket initialization useEffect above
+    
     const handleCodeUpdate = (newCode) => {
       setCode(newCode);
     };
@@ -213,7 +239,7 @@ const EditorComponent = ({ user, setUser }) => {
       } catch {}
     };
 
-    socket.on("userJoined", handleUserJoined);
+    // userJoined is registered in socket initialization useEffect above
     socket.on("codeUpdate", handleCodeUpdate);
     socket.on("userTyping", handleUserTyping);
     socket.on("languageUpdate", handleLanguageUpdate);
@@ -261,6 +287,16 @@ const EditorComponent = ({ user, setUser }) => {
       return;
     }
     
+    // Wait for socket to be connected
+    if (!socket.connected) {
+      console.log('Waiting for socket connection...');
+      socket.once('connect', () => {
+        console.log('Socket connected, joining room now');
+        joinRoom();
+      });
+      return;
+    }
+    
     console.log('Attempting to join room:', roomId, 'as user:', effectiveName);
     
     // Set joined immediately to show UI
@@ -268,14 +304,9 @@ const EditorComponent = ({ user, setUser }) => {
     sessionStorage.setItem('roomId', roomId);
     sessionStorage.setItem('userName', effectiveName);
     
-    // Emit join - socket will handle connection state
-    if (socket) {
-      socket.emit("join", { roomId, userName: effectiveName });
-      console.log('Join event emitted for room:', roomId);
-    } else {
-      console.error('Socket not available, cannot join room');
-      setJoined(false);
-    }
+    // Emit join - socket is connected
+    socket.emit("join", { roomId, userName: effectiveName });
+    console.log('Join event emitted for room:', roomId);
   };
 
   const leaveRoom = () => {
